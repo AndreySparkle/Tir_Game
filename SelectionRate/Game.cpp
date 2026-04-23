@@ -6,6 +6,8 @@
 #include <string>
 #include <fstream>
 #include <cstdio>
+#include <algorithm>
+#include <windows.h>
 
 Game::Game()
     : score(0),
@@ -22,7 +24,8 @@ Game::Game()
     currentMode(Mode::Standard),
     spawnInterval(1.0f),
     maxTargets(5),
-    maxInactivityTime(5.0f)
+    maxInactivityTime(5.0f),
+    showShareStatus(false)
 {
     sf::ContextSettings settings;
     settings.antiAliasingLevel = 8;
@@ -85,6 +88,15 @@ void Game::saveBestScore()
     }
 }
 
+void Game::resetRecords()
+{
+    bestScoreStandard = 0;
+    bestScoreEndless = 0;
+    bestTimeEndless = 0;
+    saveBestScore();
+    updateGameplayText();
+}
+
 void Game::checkBestScore()
 {
     if (currentMode == Mode::Standard)
@@ -111,6 +123,57 @@ void Game::checkBestScore()
                 saveBestScore();
             }
         }
+    }
+}
+
+std::string Game::getCurrentRecordString() const
+{
+    if (currentMode == Mode::Standard)
+    {
+        return "Best Standard: " + std::to_string(bestScoreStandard);
+    }
+
+    return "Best Endless: " + std::to_string(bestScoreEndless) +
+        " pts | " + formatTime(bestTimeEndless);
+}
+
+bool Game::copyToClipboard(const std::string& text)
+{
+    if (!OpenClipboard(nullptr))
+        return false;
+
+    EmptyClipboard();
+
+    HGLOBAL hGlob = GlobalAlloc(GMEM_MOVEABLE, text.size() + 1);
+    if (!hGlob)
+    {
+        CloseClipboard();
+        return false;
+    }
+
+    void* buffer = GlobalLock(hGlob);
+    memcpy(buffer, text.c_str(), text.size() + 1);
+    GlobalUnlock(hGlob);
+
+    if (!SetClipboardData(CF_TEXT, hGlob))
+    {
+        GlobalFree(hGlob);
+        CloseClipboard();
+        return false;
+    }
+
+    CloseClipboard();
+    return true;
+}
+
+void Game::showShareCopiedMessage(const std::string& message)
+{
+    if (shareStatusText)
+    {
+        shareStatusText->setString(message);
+        showShareStatus = true;
+        shareStatusClock.restart();
+        updateTextPositions();
     }
 }
 
@@ -192,8 +255,17 @@ void Game::setupText()
     titleText.emplace(font, "SELECTION RATE", 64);
     standardText.emplace(font, "STANDARD", 40);
     endlessText.emplace(font, "ENDLESS", 40);
+    settingsText.emplace(font, "SETTINGS", 40);
     exitText.emplace(font, "EXIT", 40);
-    restartText.emplace(font, "RESTART", 40);
+
+    settingsTitleText.emplace(font, "SETTINGS", 56);
+    spawnRateLabelText.emplace(font, "Spawn Rate", 34);
+    spawnRateValueText.emplace(font, "1.0 sec", 34);
+    spawnRateMinusText.emplace(font, "-", 44);
+    spawnRatePlusText.emplace(font, "+", 44);
+    resetRecordsText.emplace(font, "RESET RECORDS", 34);
+    backText.emplace(font, "BACK", 38);
+    settingsInfoText.emplace(font, "Change target spawn speed and reset highscores", 24);
 
     scoreText.emplace(font, "Score: 0", 28);
     timerText.emplace(font, "Time: 60", 28);
@@ -203,31 +275,74 @@ void Game::setupText()
 
     gameOverText.emplace(font, "GAME OVER", 58);
     finalScoreText.emplace(font, "Final score: 0", 34);
+    restartText.emplace(font, "RESTART", 38);
+    menuText.emplace(font, "MENU", 38);
+    shareRecordText.emplace(font, "SHARE RECORD", 38);
+    exitGameOverText.emplace(font, "EXIT", 38);
+    shareStatusText.emplace(font, "", 24);
+
     hintText.emplace(font, "ESC - Menu", 24);
     bestScoreStandardMenuText.emplace(font, "Best Standard: 0", 28);
     bestScoreEndlessMenuText.emplace(font, "Best Endless: 0 pts | 00:00", 28);
     bestScoreGameOverText.emplace(font, "Best score: 0", 32);
     currentModeText.emplace(font, "Mode: Standard", 28);
 
-    titleText->setFillColor(sf::Color::Black);
-    standardText->setFillColor(sf::Color::Black);
-    endlessText->setFillColor(sf::Color::Black);
-    exitText->setFillColor(sf::Color::Black);
-    restartText->setFillColor(sf::Color::Black);
+    auto black = sf::Color::Black;
 
-    scoreText->setFillColor(sf::Color::Black);
-    timerText->setFillColor(sf::Color::Black);
-    missesText->setFillColor(sf::Color::Black);
-    idleText->setFillColor(sf::Color::Black);
-    comboText->setFillColor(sf::Color::Black);
+    titleText->setFillColor(black);
+    standardText->setFillColor(black);
+    endlessText->setFillColor(black);
+    settingsText->setFillColor(black);
+    exitText->setFillColor(black);
 
-    gameOverText->setFillColor(sf::Color::Black);
-    finalScoreText->setFillColor(sf::Color::Black);
+    settingsTitleText->setFillColor(black);
+    spawnRateLabelText->setFillColor(black);
+    spawnRateValueText->setFillColor(black);
+    spawnRateMinusText->setFillColor(black);
+    spawnRatePlusText->setFillColor(black);
+    resetRecordsText->setFillColor(black);
+    backText->setFillColor(black);
+    settingsInfoText->setFillColor(sf::Color(90, 90, 90));
+
+    scoreText->setFillColor(black);
+    timerText->setFillColor(black);
+    missesText->setFillColor(black);
+    idleText->setFillColor(black);
+    comboText->setFillColor(black);
+
+    gameOverText->setFillColor(black);
+    finalScoreText->setFillColor(black);
+    restartText->setFillColor(black);
+    menuText->setFillColor(black);
+    shareRecordText->setFillColor(black);
+    exitGameOverText->setFillColor(black);
+    shareStatusText->setFillColor(sf::Color(40, 120, 40));
+
     hintText->setFillColor(sf::Color(70, 70, 70));
-    bestScoreStandardMenuText->setFillColor(sf::Color::Black);
-    bestScoreEndlessMenuText->setFillColor(sf::Color::Black);
-    bestScoreGameOverText->setFillColor(sf::Color::Black);
-    currentModeText->setFillColor(sf::Color::Black);
+    bestScoreStandardMenuText->setFillColor(black);
+    bestScoreEndlessMenuText->setFillColor(black);
+    bestScoreGameOverText->setFillColor(black);
+    currentModeText->setFillColor(black);
+
+    spawnMinusButton.setSize({ 70.f, 70.f });
+    spawnMinusButton.setFillColor(sf::Color(230, 230, 230));
+    spawnMinusButton.setOutlineThickness(2.f);
+    spawnMinusButton.setOutlineColor(sf::Color::Black);
+
+    spawnPlusButton.setSize({ 70.f, 70.f });
+    spawnPlusButton.setFillColor(sf::Color(230, 230, 230));
+    spawnPlusButton.setOutlineThickness(2.f);
+    spawnPlusButton.setOutlineColor(sf::Color::Black);
+
+    resetRecordsButton.setSize({ 320.f, 70.f });
+    resetRecordsButton.setFillColor(sf::Color(230, 230, 230));
+    resetRecordsButton.setOutlineThickness(2.f);
+    resetRecordsButton.setOutlineColor(sf::Color::Black);
+
+    backButton.setSize({ 220.f, 70.f });
+    backButton.setFillColor(sf::Color(230, 230, 230));
+    backButton.setOutlineThickness(2.f);
+    backButton.setOutlineColor(sf::Color::Black);
 }
 
 void Game::updateGameplayText()
@@ -308,6 +423,13 @@ void Game::updateGameplayText()
         else
             currentModeText->setString("Mode: Endless");
     }
+
+    if (spawnRateValueText)
+    {
+        char buffer[32];
+        std::snprintf(buffer, sizeof(buffer), "%.1f sec", spawnInterval);
+        spawnRateValueText->setString(buffer);
+    }
 }
 
 void Game::updateTextPositions()
@@ -325,62 +447,99 @@ void Game::updateTextPositions()
 
     if (titleText)
     {
-        titleText->setPosition({ w / 2.f, h * 0.13f });
+        titleText->setPosition({ w / 2.f, h * 0.12f });
         centerTextX(*titleText, w / 2.f);
     }
 
     if (standardText)
     {
-        standardText->setPosition({ w / 2.f, h * 0.33f });
+        standardText->setPosition({ w / 2.f, h * 0.30f });
         centerTextX(*standardText, w / 2.f);
     }
 
     if (endlessText)
     {
-        endlessText->setPosition({ w / 2.f, h * 0.43f });
+        endlessText->setPosition({ w / 2.f, h * 0.40f });
         centerTextX(*endlessText, w / 2.f);
     }
 
-    if (restartText)
+    if (settingsText)
     {
-        restartText->setPosition({ w / 2.f, h * 0.43f });
-        centerTextX(*restartText, w / 2.f);
+        settingsText->setPosition({ w / 2.f, h * 0.50f });
+        centerTextX(*settingsText, w / 2.f);
     }
 
     if (exitText)
     {
-        exitText->setPosition({ w / 2.f, h * 0.55f });
+        exitText->setPosition({ w / 2.f, h * 0.60f });
         centerTextX(*exitText, w / 2.f);
-    }
-
-    if (gameOverText)
-    {
-        gameOverText->setPosition({ w / 2.f, h * 0.16f });
-        centerTextX(*gameOverText, w / 2.f);
-    }
-
-    if (finalScoreText)
-    {
-        finalScoreText->setPosition({ w / 2.f, h * 0.26f });
-        centerTextX(*finalScoreText, w / 2.f);
     }
 
     if (bestScoreStandardMenuText)
     {
-        bestScoreStandardMenuText->setPosition({ w / 2.f, h * 0.66f });
+        bestScoreStandardMenuText->setPosition({ w / 2.f, h * 0.72f });
         centerTextX(*bestScoreStandardMenuText, w / 2.f);
     }
 
     if (bestScoreEndlessMenuText)
     {
-        bestScoreEndlessMenuText->setPosition({ w / 2.f, h * 0.72f });
+        bestScoreEndlessMenuText->setPosition({ w / 2.f, h * 0.78f });
         centerTextX(*bestScoreEndlessMenuText, w / 2.f);
     }
 
-    if (bestScoreGameOverText)
+    if (settingsTitleText)
     {
-        bestScoreGameOverText->setPosition({ w * 0.82f, h * 0.22f });
-        centerTextX(*bestScoreGameOverText, w * 0.82f);
+        settingsTitleText->setPosition({ w / 2.f, h * 0.12f });
+        centerTextX(*settingsTitleText, w / 2.f);
+    }
+
+    if (settingsInfoText)
+    {
+        settingsInfoText->setPosition({ w / 2.f, h * 0.20f });
+        centerTextX(*settingsInfoText, w / 2.f);
+    }
+
+    float settingsY = h * 0.36f;
+
+    spawnMinusButton.setPosition({ w / 2.f - 320.f, settingsY - 18.f });
+    spawnPlusButton.setPosition({ w / 2.f + 250.f, settingsY - 18.f });
+
+    resetRecordsButton.setPosition({ w / 2.f - 160.f, h * 0.50f - 15.f });
+    backButton.setPosition({ w / 2.f - 110.f, h * 0.62f - 15.f });
+
+    if (spawnRateLabelText)
+    {
+        spawnRateLabelText->setPosition({ w / 2.f - 190.f, settingsY });
+    }
+
+    if (spawnRateValueText)
+    {
+        spawnRateValueText->setPosition({ w / 2.f + 40.f, settingsY });
+        centerTextX(*spawnRateValueText, w / 2.f + 40.f);
+    }
+
+    if (spawnRateMinusText)
+    {
+        spawnRateMinusText->setPosition({ w / 2.f - 285.f, settingsY - 6.f });
+        centerTextX(*spawnRateMinusText, w / 2.f - 285.f);
+    }
+
+    if (spawnRatePlusText)
+    {
+        spawnRatePlusText->setPosition({ w / 2.f + 285.f, settingsY - 6.f });
+        centerTextX(*spawnRatePlusText, w / 2.f + 285.f);
+    }
+
+    if (resetRecordsText)
+    {
+        resetRecordsText->setPosition({ w / 2.f, h * 0.50f });
+        centerTextX(*resetRecordsText, w / 2.f);
+    }
+
+    if (backText)
+    {
+        backText->setPosition({ w / 2.f, h * 0.62f });
+        centerTextX(*backText, w / 2.f);
     }
 
     if (scoreText)
@@ -410,8 +569,137 @@ void Game::updateTextPositions()
         idleText->setPosition({ w - bounds.size.x - 30.f, 100.f });
     }
 
+    if (gameOverText)
+    {
+        gameOverText->setPosition({ w / 2.f, h * 0.14f });
+        centerTextX(*gameOverText, w / 2.f);
+    }
+
+    if (finalScoreText)
+    {
+        finalScoreText->setPosition({ w / 2.f, h * 0.24f });
+        centerTextX(*finalScoreText, w / 2.f);
+    }
+
+    if (bestScoreGameOverText)
+    {
+        bestScoreGameOverText->setPosition({ w / 2.f, h * 0.33f });
+        centerTextX(*bestScoreGameOverText, w / 2.f);
+    }
+
+    if (restartText)
+    {
+        restartText->setPosition({ w / 2.f, h * 0.46f });
+        centerTextX(*restartText, w / 2.f);
+    }
+
+    if (menuText)
+    {
+        menuText->setPosition({ w / 2.f, h * 0.54f });
+        centerTextX(*menuText, w / 2.f);
+    }
+
+    if (shareRecordText)
+    {
+        shareRecordText->setPosition({ w / 2.f, h * 0.62f });
+        centerTextX(*shareRecordText, w / 2.f);
+    }
+
+    if (exitGameOverText)
+    {
+        exitGameOverText->setPosition({ w / 2.f, h * 0.70f });
+        centerTextX(*exitGameOverText, w / 2.f);
+    }
+
+    if (shareStatusText)
+    {
+        shareStatusText->setPosition({ w / 2.f, h * 0.78f });
+        centerTextX(*shareStatusText, w / 2.f);
+    }
+
     if (hintText)
         hintText->setPosition({ 20.f, h - 45.f });
+}
+
+void Game::updateButtonHover()
+{
+    auto resetButtonStyle = [](sf::Text& text)
+        {
+            text.setFillColor(sf::Color::Black);
+            text.setScale({ 1.f, 1.f });
+        };
+
+    auto highlightButtonStyle = [](sf::Text& text)
+        {
+            text.setFillColor(sf::Color(200, 30, 30));
+            text.setScale({ 1.12f, 1.12f });
+        };
+
+    sf::Vector2i mousePos = sf::Mouse::getPosition(window);
+    int mouseX = mousePos.x;
+    int mouseY = mousePos.y;
+    sf::Vector2f mousePosF(static_cast<float>(mouseX), static_cast<float>(mouseY));
+
+    if (standardText) resetButtonStyle(*standardText);
+    if (endlessText) resetButtonStyle(*endlessText);
+    if (settingsText) resetButtonStyle(*settingsText);
+    if (exitText) resetButtonStyle(*exitText);
+
+    if (spawnRateMinusText) resetButtonStyle(*spawnRateMinusText);
+    if (spawnRatePlusText) resetButtonStyle(*spawnRatePlusText);
+    if (resetRecordsText) resetButtonStyle(*resetRecordsText);
+    if (backText) resetButtonStyle(*backText);
+
+    if (restartText) resetButtonStyle(*restartText);
+    if (menuText) resetButtonStyle(*menuText);
+    if (shareRecordText) resetButtonStyle(*shareRecordText);
+    if (exitGameOverText) resetButtonStyle(*exitGameOverText);
+
+    spawnMinusButton.setFillColor(sf::Color(230, 230, 230));
+    spawnPlusButton.setFillColor(sf::Color(230, 230, 230));
+    resetRecordsButton.setFillColor(sf::Color(230, 230, 230));
+    backButton.setFillColor(sf::Color(230, 230, 230));
+
+    if (gameState == State::Menu)
+    {
+        if (standardText && isTextClicked(*standardText, mouseX, mouseY)) highlightButtonStyle(*standardText);
+        if (endlessText && isTextClicked(*endlessText, mouseX, mouseY)) highlightButtonStyle(*endlessText);
+        if (settingsText && isTextClicked(*settingsText, mouseX, mouseY)) highlightButtonStyle(*settingsText);
+        if (exitText && isTextClicked(*exitText, mouseX, mouseY)) highlightButtonStyle(*exitText);
+    }
+    else if (gameState == State::Settings)
+    {
+        if (spawnMinusButton.getGlobalBounds().contains(mousePosF))
+        {
+            spawnMinusButton.setFillColor(sf::Color(255, 210, 210));
+            if (spawnRateMinusText) highlightButtonStyle(*spawnRateMinusText);
+        }
+
+        if (spawnPlusButton.getGlobalBounds().contains(mousePosF))
+        {
+            spawnPlusButton.setFillColor(sf::Color(255, 210, 210));
+            if (spawnRatePlusText) highlightButtonStyle(*spawnRatePlusText);
+        }
+
+        if (resetRecordsButton.getGlobalBounds().contains(mousePosF))
+        {
+            resetRecordsButton.setFillColor(sf::Color(255, 210, 210));
+            if (resetRecordsText) highlightButtonStyle(*resetRecordsText);
+        }
+
+        if (backButton.getGlobalBounds().contains(mousePosF))
+        {
+            backButton.setFillColor(sf::Color(255, 210, 210));
+            if (backText) highlightButtonStyle(*backText);
+        }
+    }
+    else if (gameState == State::GameOver)
+    {
+        if (restartText && isTextClicked(*restartText, mouseX, mouseY)) highlightButtonStyle(*restartText);
+        if (menuText && isTextClicked(*menuText, mouseX, mouseY)) highlightButtonStyle(*menuText);
+        if (shareRecordText && isTextClicked(*shareRecordText, mouseX, mouseY)) highlightButtonStyle(*shareRecordText);
+        if (exitGameOverText && isTextClicked(*exitGameOverText, mouseX, mouseY)) highlightButtonStyle(*exitGameOverText);
+    }
 }
 
 void Game::startGame(Mode mode)
@@ -434,6 +722,8 @@ void Game::startGame(Mode mode)
     spawnClock.restart();
     inactivityClock.restart();
 
+    showShareStatus = false;
+
     updateGameplayText();
     updateTextPositions();
 }
@@ -455,7 +745,16 @@ void Game::returnToMenu()
     timeLeft = 60;
     misses = 0;
     endlessTimeSeconds = 0;
+    showShareStatus = false;
 
+    updateGameplayText();
+    updateTextPositions();
+}
+
+void Game::openSettings()
+{
+    gameState = State::Settings;
+    showShareStatus = false;
     updateGameplayText();
     updateTextPositions();
 }
@@ -732,7 +1031,7 @@ void Game::processEvents()
         {
             if (keyPressed->code == sf::Keyboard::Key::Escape)
             {
-                if (gameState == State::Playing || gameState == State::GameOver)
+                if (gameState == State::Playing || gameState == State::GameOver || gameState == State::Settings)
                 {
                     returnToMenu();
                 }
@@ -757,9 +1056,38 @@ void Game::processEvents()
                 {
                     startGame(Mode::Endless);
                 }
+                else if (settingsText && isTextClicked(*settingsText, mouseX, mouseY))
+                {
+                    openSettings();
+                }
                 else if (exitText && isTextClicked(*exitText, mouseX, mouseY))
                 {
                     window.close();
+                }
+            }
+            else if (gameState == State::Settings)
+            {
+                sf::Vector2f mousePosF(static_cast<float>(mouseX), static_cast<float>(mouseY));
+
+                if (spawnMinusButton.getGlobalBounds().contains(mousePosF))
+                {
+                    spawnInterval = std::max(0.2f, spawnInterval - 0.1f);
+                    updateGameplayText();
+                    updateTextPositions();
+                }
+                else if (spawnPlusButton.getGlobalBounds().contains(mousePosF))
+                {
+                    spawnInterval = std::min(3.0f, spawnInterval + 0.1f);
+                    updateGameplayText();
+                    updateTextPositions();
+                }
+                else if (resetRecordsButton.getGlobalBounds().contains(mousePosF))
+                {
+                    resetRecords();
+                }
+                else if (backButton.getGlobalBounds().contains(mousePosF))
+                {
+                    returnToMenu();
                 }
             }
             else if (gameState == State::Playing)
@@ -815,7 +1143,18 @@ void Game::processEvents()
                 {
                     resetGame();
                 }
-                else if (exitText && isTextClicked(*exitText, mouseX, mouseY))
+                else if (menuText && isTextClicked(*menuText, mouseX, mouseY))
+                {
+                    returnToMenu();
+                }
+                else if (shareRecordText && isTextClicked(*shareRecordText, mouseX, mouseY))
+                {
+                    if (copyToClipboard(getCurrentRecordString()))
+                        showShareCopiedMessage("Record copied to clipboard");
+                    else
+                        showShareCopiedMessage("Clipboard copy failed");
+                }
+                else if (exitGameOverText && isTextClicked(*exitGameOverText, mouseX, mouseY))
                 {
                     window.close();
                 }
@@ -826,56 +1165,11 @@ void Game::processEvents()
 
 void Game::update()
 {
-    if (standardText && endlessText && exitText && restartText)
+    updateButtonHover();
+
+    if (showShareStatus && shareStatusClock.getElapsedTime().asSeconds() >= 2.0f)
     {
-        sf::Vector2i mousePos = sf::Mouse::getPosition(window);
-        int mouseX = mousePos.x;
-        int mouseY = mousePos.y;
-
-        standardText->setFillColor(sf::Color::Black);
-        endlessText->setFillColor(sf::Color::Black);
-        exitText->setFillColor(sf::Color::Black);
-        restartText->setFillColor(sf::Color::Black);
-
-        standardText->setScale({ 1.f, 1.f });
-        endlessText->setScale({ 1.f, 1.f });
-        exitText->setScale({ 1.f, 1.f });
-        restartText->setScale({ 1.f, 1.f });
-
-        if (gameState == State::Menu)
-        {
-            if (isTextClicked(*standardText, mouseX, mouseY))
-            {
-                standardText->setFillColor(sf::Color(200, 30, 30));
-                standardText->setScale({ 1.12f, 1.12f });
-            }
-
-            if (isTextClicked(*endlessText, mouseX, mouseY))
-            {
-                endlessText->setFillColor(sf::Color(200, 30, 30));
-                endlessText->setScale({ 1.12f, 1.12f });
-            }
-
-            if (isTextClicked(*exitText, mouseX, mouseY))
-            {
-                exitText->setFillColor(sf::Color(200, 30, 30));
-                exitText->setScale({ 1.12f, 1.12f });
-            }
-        }
-        else if (gameState == State::GameOver)
-        {
-            if (isTextClicked(*restartText, mouseX, mouseY))
-            {
-                restartText->setFillColor(sf::Color(200, 30, 30));
-                restartText->setScale({ 1.12f, 1.12f });
-            }
-
-            if (isTextClicked(*exitText, mouseX, mouseY))
-            {
-                exitText->setFillColor(sf::Color(200, 30, 30));
-                exitText->setScale({ 1.12f, 1.12f });
-            }
-        }
+        showShareStatus = false;
     }
 
     if (gameState == State::Playing)
@@ -937,10 +1231,28 @@ void Game::render()
         if (titleText)                 window.draw(*titleText);
         if (standardText)              window.draw(*standardText);
         if (endlessText)               window.draw(*endlessText);
+        if (settingsText)              window.draw(*settingsText);
         if (exitText)                  window.draw(*exitText);
         if (bestScoreStandardMenuText) window.draw(*bestScoreStandardMenuText);
         if (bestScoreEndlessMenuText)  window.draw(*bestScoreEndlessMenuText);
         if (hintText)                  window.draw(*hintText);
+    }
+    else if (gameState == State::Settings)
+    {
+        window.draw(spawnMinusButton);
+        window.draw(spawnPlusButton);
+        window.draw(resetRecordsButton);
+        window.draw(backButton);
+
+        if (settingsTitleText)  window.draw(*settingsTitleText);
+        if (settingsInfoText)   window.draw(*settingsInfoText);
+        if (spawnRateLabelText) window.draw(*spawnRateLabelText);
+        if (spawnRateValueText) window.draw(*spawnRateValueText);
+        if (spawnRateMinusText) window.draw(*spawnRateMinusText);
+        if (spawnRatePlusText)  window.draw(*spawnRatePlusText);
+        if (resetRecordsText)   window.draw(*resetRecordsText);
+        if (backText)           window.draw(*backText);
+        if (hintText)           window.draw(*hintText);
     }
     else if (gameState == State::Playing)
     {
@@ -999,7 +1311,10 @@ void Game::render()
         if (bestScoreGameOverText) window.draw(*bestScoreGameOverText);
         if (currentModeText)       window.draw(*currentModeText);
         if (restartText)           window.draw(*restartText);
-        if (exitText)              window.draw(*exitText);
+        if (menuText)              window.draw(*menuText);
+        if (shareRecordText)       window.draw(*shareRecordText);
+        if (exitGameOverText)      window.draw(*exitGameOverText);
+        if (showShareStatus && shareStatusText) window.draw(*shareStatusText);
         if (hintText)              window.draw(*hintText);
     }
 
